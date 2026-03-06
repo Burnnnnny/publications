@@ -795,4 +795,95 @@ function _clearOrTake(Currency currency, uint256 amountMax) internal {
 
 ### _sweep
 
-`PositionManager`에서 단일 토큰 잔액 인출(참고: `PoolManager` 아님).
+`PositionManager`에서 단일 토큰 잔액을 인출합니다(참고: `PoolManager`가 아닙니다).
+
+```solidity
+/// @notice Sweeps the entire contract balance of specified currency to the recipient
+function _sweep(Currency currency, address to) internal {
+    uint256 balance = currency.balanceOfSelf();
+    if (balance > 0) currency.transfer(to, balance);
+}
+```
+
+`currency.balanceOfSelf` 메서드를 호출하여 `PositionManager` 컨트랙트가 보유한 해당 토큰의 잔액을 조회합니다.
+
+잔액이 0보다 크면 `currency.transfer` 메서드를 호출하여 `to` 주소로 전송합니다.
+
+### _modifyLiquidity
+
+```solidity
+/// @dev if there is a subscriber attached to the position, this function will notify the subscriber
+function _modifyLiquidity(
+    PositionInfo info,
+    PoolKey memory poolKey,
+    int256 liquidityChange,
+    bytes32 salt,
+    bytes calldata hookData
+) internal returns (BalanceDelta liquidityDelta, BalanceDelta feesAccrued) {
+    (liquidityDelta, feesAccrued) = poolManager.modifyLiquidity(
+        poolKey,
+        IPoolManager.ModifyLiquidityParams({
+            tickLower: info.tickLower(),
+            tickUpper: info.tickUpper(),
+            liquidityDelta: liquidityChange,
+            salt: salt
+        }),
+        hookData
+    );
+
+    if (info.hasSubscriber()) {
+        _notifyModifyLiquidity(uint256(salt), liquidityChange, feesAccrued);
+    }
+}
+```
+
+[poolManager.modifyLiquidity](../../v4-core/en/PoolManager_ko.md#modifyliquidity) 메서드를 호출하여 유동성 변경을 수행합니다. 반환값은 `liquidityDelta`와 `feesAccrued`입니다.
+
+포지션에 subscriber가 있으면 `_notifyModifyLiquidity` 메서드를 호출하여 subscriber에게 변경 사실을 알립니다.
+
+### _pay
+
+`payer`가 `poolManager`에 토큰을 지불합니다. `DeltaResolver`의 [_pay](./DeltaResolver_ko.md#_pay) 메서드를 구현합니다.
+
+```solidity
+// implementation of abstract function DeltaResolver._pay
+function _pay(Currency currency, address payer, uint256 amount) internal override {
+    if (payer == address(this)) {
+        currency.transfer(address(poolManager), amount);
+    } else {
+        // Casting from uint256 to uint160 is safe due to limits on the total supply of a pool
+        permit2.transferFrom(payer, address(poolManager), uint160(amount), Currency.unwrap(currency));
+    }
+}
+```
+
+`payer`가 `PositionManager` 컨트랙트 자신이면 `currency.transfer`를 직접 호출해 토큰을 `poolManager`로 전송합니다.
+
+그렇지 않으면 `permit2.transferFrom`을 호출하여 `payer` 계정에서 `poolManager`로 토큰을 전송합니다.
+> 참고: `payer`는 사전에 `permit` 메서드를 호출하여 `PositionManager`가 자신의 토큰을 이동할 수 있도록 승인해야 합니다.
+
+### _wrap
+
+토큰을 래핑하여 `PositionManager` 컨트랙트의 네이티브 `ETH`를 `WETH`로 변환합니다.
+
+```solidity
+/// @dev The amount should already be <= the current balance in this contract.
+function _wrap(uint256 amount) internal {
+    if (amount > 0) WETH9.deposit{value: amount}();
+}
+```
+
+`WETH9.deposit` 메서드를 호출하여 `amount`만큼의 `ETH`를 `WETH`로 변환합니다.
+
+### _unwrap
+
+토큰 래핑을 해제하여 `PositionManager` 컨트랙트의 `WETH`를 네이티브 `ETH`로 변환합니다.
+
+```solidity
+/// @dev The amount should already be <= the current balance in this contract.
+function _unwrap(uint256 amount) internal {
+    if (amount > 0) WETH9.withdraw(amount);
+}
+```
+
+`WETH9.withdraw` 메서드를 호출하여 `amount`만큼의 `WETH`를 `ETH`로 변환합니다.

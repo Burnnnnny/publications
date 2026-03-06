@@ -1,6 +1,6 @@
 [English](./README.md) | [中文](./README_zh.md)
 
-# Uniswap v3 스마트 컨트랙트 심층 분석 (Part 1)
+# Uniswap v3 스마트 컨트랙트 심층 분석 (1부)
 
 ###### 태그: `uniswap` `uniswap-v3` `smart contract` `solidity`
 
@@ -1599,6 +1599,132 @@ def find_msb(x):
             msb += 2 ** k # 이 자릿수를 1로 표시, 즉 2 ** k를 더함
             x /= 2 ** (2 ** k) # 2 ** k 비트만큼 오른쪽 시프트
     return msb
+```
+
+Uniswap v3의 Solidity 코드는 다음과 같습니다(코드 주석 참고):
+
+```solidity
+/// @notice Calculates the greatest tick value such that getRatioAtTick(tick) <= ratio
+/// @dev Throws in case sqrtPriceX96 < MIN_SQRT_RATIO, as MIN_SQRT_RATIO is the lowest value getRatioAtTick may
+/// ever return.
+/// @param sqrtPriceX96 The sqrt ratio for which to compute the tick as a Q64.96
+/// @return tick The greatest tick for which the ratio is less than or equal to the input ratio
+function getTickAtSqrtRatio(uint160 sqrtPriceX96) internal pure returns (int24 tick) {
+    // second inequality must be < because the price can never reach the price at the max tick
+    require(sqrtPriceX96 >= MIN_SQRT_RATIO && sqrtPriceX96 < MAX_SQRT_RATIO, 'R');
+    uint256 ratio = uint256(sqrtPriceX96) << 32; // Left-shift by 32 bits, converting to Q128.128 format
+
+    uint256 r = ratio;
+    uint256 msb = 0;
+
+    assembly {
+        // If greater than 2 ** (2 ** 7) - 1, save the temporary variable: 2 ** 7
+        let f := shl(7, gt(r, 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF))
+        // msb += 2 ** 7
+        msb := or(msb, f)
+        // r /= (2 ** (2 ** 7)), i.e., right-shift by 2 ** 7
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(6, gt(r, 0xFFFFFFFFFFFFFFFF))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(5, gt(r, 0xFFFFFFFF))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(4, gt(r, 0xFFFF))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(3, gt(r, 0xFF))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(2, gt(r, 0xF))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := shl(1, gt(r, 0x3))
+        msb := or(msb, f)
+        r := shr(f, r)
+    }
+    assembly {
+        let f := gt(r, 0x1)
+        msb := or(msb, f)
+    }
+```
+
+##### 소수 부분
+
+소수 부분 $m$에 대해서는 다음이 성립합니다:
+
+$$
+0 \leq m = log_2{x} - n = log_2{\frac{x}{2^n}} < 1 \quad \text{(1.2)}
+$$
+
+여기서 $n$은 앞에서 계산한 msb, 즉 정수 부분입니다.
+
+먼저 $\frac{x}{2^n}$ 전체를 하나의 값 $r$로 두면:
+
+$$
+0 \leq log_2{r} < 1
+$$
+
+$$
+1 \leq r = \frac{x}{2^n} < 2
+$$
+
+이제 목표는 $log_2{r}$를 구하는 것입니다. `log_2{r}`를 충분히 많은 소수 자릿수를 가진 수렴 급수로 표현할 수 있다면 그 값을 근사할 수 있습니다.
+
+로그의 성질을 이용하면 다음 두 식을 얻을 수 있습니다:
+
+$$
+log_2{r} = \frac{2 \cdot log_2{r}}{2} = \frac{log_2{r^2}}{2} \quad \text{(1.3)}
+$$
+
+$$
+log_2{r} = log_2{2 \cdot \frac{r}{2}} = 1 + log_2{\frac{r}{2}} \quad \text{(1.4)}
+$$
+
+위 두 공식을 반복 적용하면 다음과 같은 절차로 정리할 수 있습니다:
+
+1. 처음에는 항상 $log_2{r} < 1$이므로 먼저 공식 1.3을 적용해 문제를 $log_2{r^2}$를 구하는 형태로 바꿉니다. 이 시점의 가중치는 $\frac{1}{2}$입니다.
+   - 실제로는 1단계에 들어갈 때마다 가중치가 이전의 절반으로 줄어듭니다. 예를 들어 두 번째 진입에서는 $\frac{1}{4}$, 세 번째 진입에서는 $\frac{1}{8}$이 됩니다.
+2. 만약 $r^2 \geq 2$라면 공식 1.4를 적용해 1을 분리하고, 문제를 $log_2{\frac{r^2}{2}}$를 구하는 것으로 바꿉니다.
+   - 이 판단은 공식 1.3 이후에 일어나므로, 분리된 1에는 직전 1단계의 가중치를 곱해 기록해야 합니다. 첫 번째라면 $\frac{1}{2}$, 두 번째라면 $\frac{1}{4}$를 기록하는 식입니다.
+   - 또한 $1 \leq r < 2$이고 $2 \leq r^2 < 4$이므로, $1 \leq \frac{r^2}{2} < 2$가 됩니다. 따라서 $\frac{r^2}{2}$를 다시 하나의 값 $r$로 두고 1단계로 돌아가면 됩니다.
+3. 만약 $r^2 < 2$라면 1단계로 돌아가 계속 반복합니다.
+
+이 과정을 다음 식으로 정리할 수 있습니다:
+
+$$
+log_2{r} = m_1 \cdot \frac{1}{2} + m_2 \cdot \frac{1}{4} + ... + m_n \cdot \frac{1}{2^n} = \sum^{\infty}_{i=1}(m_i \cdot \frac{1}{2^i}) \quad \text{(1.5)}
+$$
+
+여기서 $\forall m_i \in \{0, 1\}$입니다.
+
+이는 사실상 소수의 이진 표현입니다. 첫 번째 이진 자리는 $2^{-1}$, 두 번째는 $2^{-2}$를 나타냅니다. 위 절차에서 2단계로 들어가면 해당 자리를 1로 기록하는 것과 같고, 3단계로 가면 0으로 기록하는 것과 같습니다.
+
+이 과정을 반복하는 것은 소수 부분의 각 이진 비트를 높은 자리에서 낮은 자리로(왼쪽에서 오른쪽으로) 하나씩 결정하는 과정입니다. 반복 횟수가 많을수록 계산된 $log_2{r}$의 정밀도는 높아집니다.
+
+이제 Uniswap v3에서 소수 부분을 계산하는 코드를 이어서 보겠습니다:
+
+```solidity
+        if (msb >= 128) r = ratio >> (msb - 127);
+        else r = ratio << (127 - msb);
+```
+
+여기서 msb는 정수 부분 $n$입니다. ratio는 `Q128.128` 형식이므로 `msb >= 128`이면 `ratio >= 1`이고, 이 경우 정수 자릿수만큼 오른쪽으로 시프트해 소수 부분을 꺼내야 합니다. `-127`은 결과를 `Q129.127` 형식으로 맞추기 위해 127비트 왼쪽 정렬하는 의미입니다. 반대로 `msb < 128`이면 `ratio < 1`이므로 정수 부분이 없고, `127 - msb`만큼 왼쪽으로 시프트해 마찬가지로 `Q129.127` 형식으로 맞춥니다.
+
+실제로 `ratio >> msb`는 공식 1.2의 $\frac{x}{2^n}$, 즉 1단계에서 사용한 $r$에 해당하며 이후의 반복 알고리즘(1~3단계)에 사용됩니다.
+
 ```solidity
     int256 log_2 = (int256(msb) - 128) << 64;
 ```
@@ -1880,7 +2006,7 @@ next = initialized
     : (compressed - int24(bitPos)) * tickSpacing;
 ```
 
-`BitMath.mostSignificantBit(masked)`는 이진 검색 방법을 사용하여 `masked`에서 가장 높은 1의 비트를 찾습니다. 이 알고리즘에 대한 자세한 설명은 [TickMath 로그 계산](#Integer Part) 섹션을 참조하십시오. 간단히 말해서 `mostSignificantBit(masked)`는 다음을 만족하는 숫자 `n`을 반환합니다:
+`BitMath.mostSignificantBit(masked)`는 이진 검색 방법을 사용하여 `masked`에서 가장 높은 1의 비트를 찾습니다. 이 알고리즘에 대한 자세한 설명은 [TickMath 로그 계산](#정수-부분) 섹션을 참조하십시오. 간단히 말해서 `mostSignificantBit(masked)`는 다음을 만족하는 숫자 `n`을 반환합니다:
 
 $$
 2^n \leq masked < 2^{n+1}
@@ -2272,7 +2398,6 @@ function getNextSqrtPriceFromAmount0RoundingUp(
         uint256 denominator = numerator1 - product;
         return FullMath.mulDivRoundingUp(numerator1, sqrtPX96, denominator).toUint160();
     }
-```solidity
 }
 ```
 

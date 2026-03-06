@@ -1,6 +1,6 @@
 [English](./README.md) | [中文](./README_zh.md)
 
-# Uniswap v3 백서 심층 분석 (Deep Dive into Uniswap v3 Whitepaper)
+# Uniswap v3 백서 심층 분석
 
 ###### 태그: `uniswap` `uniswap-v3` `whitepaper`
 

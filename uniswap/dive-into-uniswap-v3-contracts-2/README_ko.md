@@ -1,6 +1,6 @@
 [English](./README.md) | [中文](./README_zh.md)
 
-# Uniswap v3 스마트 컨트랙트 심층 분석 (Part 2)
+# Uniswap v3 스마트 컨트랙트 심층 분석 (2부)
 
 ###### tags: `uniswap` `uniswap-v3` `smart contract` `solidity`
 

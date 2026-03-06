@@ -1,6 +1,6 @@
 [English](./README.md) | [中文](./README_zh.md)
 
-# Uniswap v2 백서 심층 분석 (Deep Dive into Uniswap v2 Whitepaper)
+# Uniswap v2 백서 심층 분석
 
 ###### 태그: `uniswap` `uniswap-v2` `whitepaper`
 

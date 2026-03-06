@@ -1,6 +1,6 @@
 [English](./README.md) | [中文](./README_zh.md)
 
-# Uniswap v2 스마트 컨트랙트 심층 분석 (Deep Dive into Uniswap v2 Smart Contracts)
+# Uniswap v2 스마트 컨트랙트 심층 분석
 
 ###### 태그: `uniswap` `uniswap-v2` `smart contract` `solidity`
 
@@ -680,4 +680,4 @@ function swapTokensForExactTokens(
 
 #### FeeOnTransferTokens
 
-일부 토큰은 전송 과정에서 수수료를 차감하여 전송된 양과 실제 수신된 양 사이에 차이가 발생합니다. 따라서 중간 교환에 필요한 토큰 양을 계산하는 것이 간단하지 않습니다. 이러한 경우 Actual received token amounts를 확인하기 위해 `transfer` 메서드 대신 `balanceOf` 메서드를 사용해야 합니다. Router02는 Inclusive Fee On Transfer Tokens에 대한 지원을 도입했습니다. 더 자세한 설명은 [공식 문서](https://docs.uniswap.org/protocol/V2/reference/smart-contracts/common-errors#inclusive-fee-on-transfer-tokens)를 참조하세요.
+일부 토큰은 전송 과정에서 수수료를 차감하여 전송된 양과 실제 수신된 양 사이에 차이가 발생합니다. 따라서 중간 교환에 필요한 토큰 양을 계산하는 것이 간단하지 않습니다. 이런 경우 실제 수령된 토큰 수량(actual received token amounts)을 확인하기 위해 `transfer` 메서드 대신 `balanceOf` 메서드를 사용해야 합니다. Router02는 수수료 차감 전송 토큰(Inclusive Fee On Transfer Tokens)에 대한 지원을 도입했습니다. 더 자세한 설명은 [공식 문서](https://docs.uniswap.org/protocol/V2/reference/smart-contracts/common-errors#inclusive-fee-on-transfer-tokens)를 참조하세요.
